@@ -26,17 +26,22 @@ using namespace std;
 string Message1 = "beginning";
 ofstream out;
 extern Piece Board[8][8];
-
-//Creating these as external so I don't have to search Board every time I want to check if there is check or checkmate
 extern unsigned int texture1;
+//Creating these as external so I don't have to search Board every time I want to check if there is check or checkmate
 extern int enpassant;
 extern int enpassanttime;
+//Store if castling is possible and if so, on what sides; castle0 stores for black, castle1 for white; 3 symbolizes that castling is possible on both
+//queen and king sides
 extern int castle0;
 extern int castle1;
+//Store window size
 float clientx, clienty;
+//Store position of mouse
 int mousex = 10000;
 int mousey = 10000;
+//Stores which player's turn it is
 extern bool player;
+//Stores which square is selected
 extern int selection[2];
 
 int PlayerTurn(int);
@@ -46,16 +51,22 @@ void DisableOpenGL(HWND, HDC, HGLRC);
 void OnLButtonDown(int, int);
 void ChangeBoardSize(HWND);
 
-
-
+/*
+This thread runs the player's actions while the other thread, Winapi Winmain runs the message operations and redraws the board
+FIXME: make more efficient
+*/
 DWORD WINAPI ThreadFunc( LPVOID lpParam )
 {
+    //Opens an output file for a record of moves
+    //FIXME add the ability to undo moves
     out.open("moves.txt");
+    //Sets up the board by assigning values to the Board[8][8] array
     SetUpBoard();
     //color is used to keep track of which player's turn it is; white (1) starts
     //Enter a while loop of normal game play
     while(player < 100)
     {
+        //Goes through a player's turn
         PlayerTurn(player);
 
         //Check for Checkmate
@@ -102,6 +113,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
                    int nCmdShow)
 {
     //Creating the second thread
+    //This thread runs the player's turn while WINAPI WinMain runs the message operations and redraws the board
     DWORD dwThreadId, dwThrdParam = 1;
     HANDLE hThread;
     hThread = CreateThread(
@@ -133,7 +145,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
     wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
     wcex.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wcex.lpszMenuName = NULL;
-    wcex.lpszClassName = "GLSample";
+    wcex.lpszClassName = "Chess";
     wcex.hIconSm = LoadIcon(NULL, IDI_APPLICATION);;
 
     if (!RegisterClassEx(&wcex))
@@ -141,8 +153,8 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
     /* create main window */
     hwnd = CreateWindowEx(0,
-                          "GLSample",
-                          "OpenGL Sample",
+                          "Chess",
+                          "Chess",
                           WS_OVERLAPPEDWINDOW,
                           CW_USEDEFAULT,
                           CW_USEDEFAULT,
@@ -157,7 +169,9 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
     /* enable OpenGL for the window */
     EnableOpenGL(hwnd, &hDC, &hRC);
+    //Moves the window to the left side of the screen adn sets the size
     MoveWindow(hwnd, 10, 10, 660, 680, true);
+    //Generate the texname for the texture
     FILE *fp = fopen("Picture 007.bmp", "rb");
     texture1 = generatetexture(fp);
     fclose(fp);
@@ -169,7 +183,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
     {
         while(!bQuit)
         {
-
+            //Message handling
             if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
             {
             /* handle or dispatch messages */
@@ -185,6 +199,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
             }
             else
             {
+                //Determines if it is time to redraw the board - if so, redraws the board
                 if (Message1 == "Piece moving" || Message1 == "selection" || Message1 == "beginning")
                 {
 
@@ -204,6 +219,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
         }
     }
     glDisable(GL_COLOR_MATERIAL);
+    //Closes thread
     CloseHandle( hThread );
     /* shutdown OpenGL */
     DisableOpenGL(hwnd, hDC, hRC);
@@ -214,6 +230,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
     return msg.wParam;
 }
 
+//Message handling
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
@@ -234,6 +251,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 break;
             }
         }
+        //If they click on the string
         case WM_LBUTTONDOWN:
         {
             OnLButtonDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
@@ -248,6 +266,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
+//Takes in the size of the window and changes the size of the viewport (where the graphics are printed) so that it is a square
 void ChangeBoardSize(HWND hwnd)
 {
     RECT ClientArea;
@@ -264,12 +283,16 @@ void ChangeBoardSize(HWND hwnd)
 
 }
 
+//A player's turn
+//color represents which color's turn it is, white or black
 int PlayerTurn(int color)
 {
     int x, y;
     int endy;
     int endx;
     int error = 1;
+    //Gets input
+    //Error equals 1 as long as there is an error and there is not valid input
     do
     {
         do
@@ -279,11 +302,11 @@ int PlayerTurn(int color)
                 error = 1;
             else
             {
+                //Checks to make sure that the square has a piece of the correct color
                 x = mousex;
                 y = mousey;
                 if ((Board[x][y].piecetype == 0) || (Board[x][y].color != color))
                 {
-                    //cout << "The square you clicked on was invalid.  Please choose another square." << endl;
                     error = 1;
                 }
                 else
@@ -297,14 +320,15 @@ int PlayerTurn(int color)
         while(error == 1);
 
         Message1 = "selection";
+        //Waits for person to select a different square
 
         while(mousey == y && x == mousex)
         {
         }
+        //Then waits for OnLButtonDown to finish calculating the mousey and mousex.  Otherwise one of those is calculated before the other
         while (Message1 != "done calculating")
         {
         }
-        //cout << mousex << " $ " << mousey << endl;
 
         endy = mousey;
         endx = mousex;
@@ -317,6 +341,7 @@ int PlayerTurn(int color)
         }
         else
         {
+        //A big switch to select the appropraite function depending on which piece is moving
         switch (Board[x][y].piecetype)
         {
             case 0:
@@ -355,16 +380,19 @@ int PlayerTurn(int color)
             }
         }
         }
+        //Resets everything so that it is ready for the next player's turn
         mousex = 100;
         mousey = 100;
         selection[0] = 100;
         selection[1] = 100;
     }
     while (error == 1);
+    //enpassanttime stores the time since the move that made enpassant possible; if it is too large, enpassant is not possible
     if (enpassanttime < 2)
         enpassanttime++;
-    //Save a record to a text file
+    //Change Message1 so that other thread knows to redraw board
     Message1 = "Piece moving";
+    //Save a record to a text file
     out << x << " " << y << " " << endx << " " << endy << endl;
 
     return error;
